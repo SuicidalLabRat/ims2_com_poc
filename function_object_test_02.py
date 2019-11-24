@@ -1,6 +1,8 @@
 #!/usr/bin/python3
 import serial
 import time
+from operator import itemgetter
+from itertools import groupby
 from json import dumps
 #from time import sleep
 # from datetime import datetime
@@ -23,6 +25,10 @@ class Ims2Macro:
         self._commands.append(command)
 
     # Run commands on IMS2.
+    # ! Maybe opening the serial connection should be managed by the client, so that
+    # ! it can be held open indefinately.  In that case this invoker would be instantiated
+    # ! with the serial connection passed in and then simply used to build the command
+    # ! list and periodically the client would call the run method.
     def run(self, dev='/dev/ttyUSB0'):
         with serial.Serial(
                 port=dev,  # '/dev/tty.usbserial-FTAMFK8M',
@@ -44,7 +50,7 @@ class Ims2Macro:
 
                 while count <= retry_count:
                     count += 1
-                    unix_time = time.time()
+                    unix_time = int(time.time())
 
                     try:
                         cmd_result = c.execute(ser)
@@ -53,8 +59,11 @@ class Ims2Macro:
                         time.sleep(.5)
                     else:
                         if cmd_result:
-                            print('{0} response: {1}'.format(class_name, cmd_result[c._success_index]))
-                            self._command_results[c.cmd] = (str(unix_time), cmd_result)
+                            self._command_results[c.cmd] = {
+                                'timestamp': str(unix_time),
+                                'cmd_return': cmd_result
+                            }
+
                             break
                         else:
                             self._command_results[c.cmd] = (str(unix_time), None)
@@ -62,14 +71,14 @@ class Ims2Macro:
 
 
 class Command(object):
-    """The COMMAND interface"""
+    """Base COMMAND interface"""
     def execute(self, ser):
         raise NotImplementedError
 
 
 class GetCmdShell(Command):
     """ Get the IMS2 command shell.
-    The IMS2 UART2 starts at the debug shell, however, to run AT commands we need to drop to the command shell.
+    The IMS2 UART2 connects to the debug shell, however, to run AT commands we need to drop to the command shell.
     This command will always need to be run on the IMS2 before issuing AT commands.  Note, if no input is detected
     on the command shell for some period of time, it exits back to the debug shell.
     """
@@ -119,6 +128,18 @@ class SetEchoOff(Command):
                 return None
 
 
+def list_list2dict(cmd_response_list, keymap=None):
+    """The keymap is a dict of potentially orphan values we might find in the cmd_response_list, and the keys that
+    they should end up associated with in the returned dictionary."""
+    # res = dict((k, [v[1] for v in itr]) for k, itr in groupby(response_list, itemgetter(0)))
+    d = dict()
+    for l in cmd_response_list:
+        if isinstance(l, list) and len(l) is not 2:
+            l.append(None)
+        d[l[0]] = l[1]
+    return d
+
+
 class GetSigStrength(Command):
     """Gets the IMS2's current signal strength, in dBm."""
     cmd = "AT+SQNMONI=9"  # 'AT+CSQ'  ## NOTE: Unlike the short command, CSQ, the longform command, SQNMONI, fails
@@ -138,16 +159,17 @@ class GetSigStrength(Command):
             print('Command \"{0}\" failed:\n{1}'.format(self.cmd, e))
             return None
         else:
-            print(sig_strength_response)
-            print(type(sig_strength_response))
             if sig_strength_response and sig_strength_response[self._success_index] in self._success_codes:
-                return sig_strength_response
+
+                sig_strength_response = [s.split(':') for s in sig_strength_response]
+
+                return list_list2dict(sig_strength_response)
             else:
                 return None
 
 
 def Ims2CmdShell(calling_obj, ser):
-    """This Receiver is the IMS2 command interface (should be a class?)"""
+    """This Receiver is the IMS2 AT command shell (should be a class?)"""
     if ser.isOpen():
         ser.flushInput()
         ser.flushOutput()
@@ -178,17 +200,24 @@ class Ims2Status(object):
 
 
 def main():
-    """Maybe move the required commands, i.e. getcmdshell and setecho to the receiver?"""
-    macro = Ims2Macro()
-    macro.add(GetCmdShell(3))
-    macro.add(SetEchoOff())
-    macro.add(GetSigStrength(3))
-    macro.run()
-    #print(macro.results)
-    at_response = macro.results
-    print(type(at_response))
-    #dumps(at_response[1])
-    #print('Sig Str: {0}'.format(macro.results['AT+SQNMONI=9'][1][4]))
+    # ! Do we need a clean, signal based, way to proactively shut this down,
+    # ! or is the serial connection being managed by 'with' enough to insure
+    # ! we gracefully close the serial connection when this service gets killed?
+    """
+    This client code should parameterize the invoker with any commands.
+    Maybe move the required commands, i.e. getcmdshell and setecho to the receiver?"""
+    at_commands = Ims2Macro()
+    at_commands.add(GetCmdShell(3))
+    at_commands.add(SetEchoOff())
+    at_commands.add(GetSigStrength(3))
+    at_commands.run()
+    at_response = at_commands.results
+    print(dumps(at_response['AT+SQNMONI=9']))
+    print(at_response['AT+SQNMONI=9']['timestamp'])
+    print(at_response['AT+SQNMONI=9']['cmd_return'])
+    print(at_response['AT+SQNMONI=9']['cmd_return']['RSRQ'])
+
+    print('json version:\n{}'.format(dumps(at_response['AT+SQNMONI=9'])))
 
 
 if __name__ == '__main__':
