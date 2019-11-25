@@ -66,7 +66,10 @@ class Ims2Macro:
 
                             break
                         else:
-                            self._command_results[c.cmd] = (str(unix_time), None)
+                            self._command_results[c.cmd] = {
+                                'timestamp': str(unix_time),
+                                'cmd_return': None
+                            }
                             time.sleep(.5)
 
 
@@ -207,16 +210,19 @@ def main():
     This client code should parameterize the invoker with any commands.
     Maybe move the required commands, i.e. getcmdshell and setecho to the receiver?"""
     at_commands = Ims2Macro()
-    at_commands.add(GetCmdShell(3))
+    at_commands.add(GetCmdShell(2))
     at_commands.add(SetEchoOff())
-    at_commands.add(GetSigStrength(3))
+    at_commands.add(GetSigStrength(2))
     at_commands.run()
     at_response = at_commands.results
+    print(at_commands.results)
     print(dumps(at_response['AT+SQNMONI=9']))
     print(at_response['AT+SQNMONI=9']['timestamp'])
     print(at_response['AT+SQNMONI=9']['cmd_return'])
-    print(at_response['AT+SQNMONI=9']['cmd_return']['RSRQ'])
-
+    if at_response['AT+SQNMONI=9']['cmd_return']:
+        print(at_response['AT+SQNMONI=9']['cmd_return']['RSRQ'])
+    else:
+        print("It looks like there was an error running the sigstr at command.  Maybe there is not service available.")
     print('json version:\n{}'.format(dumps(at_response['AT+SQNMONI=9'])))
 
 
