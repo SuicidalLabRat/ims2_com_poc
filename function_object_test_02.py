@@ -25,52 +25,40 @@ class Ims2Macro:
         self._commands.append(command)
 
     # Run commands on IMS2.
-    # ! Maybe opening the serial connection should be managed by the client, so that
-    # ! it can be held open indefinately.  In that case this invoker would be instantiated
-    # ! with the serial connection passed in and then simply used to build the command
-    # ! list and periodically the client would call the run method.
-    def run(self, dev='/dev/ttyUSB0'):
-        with serial.Serial(
-                port=dev,  # '/dev/tty.usbserial-FTAMFK8M',
-                baudrate=115200,
-                bytesize=8,
-                parity='N',
-                stopbits=1,
-                timeout=1) \
-                as ser:
-            for c in self._commands:
-                class_name = type(c).__name__
-                count = 0
-                if hasattr(c, 'retry_count'):
-                    retry_count = c.retry_count
-                    print('{0} has attribute retry_count and its set to {1}'.format(class_name, retry_count))
+    def run(self, ser):
+        for c in self._commands:
+            class_name = type(c).__name__
+            count = 0
+            if hasattr(c, 'retry_count'):
+                retry_count = c.retry_count
+                print('{0} has attribute retry_count and its set to {1}'.format(class_name, retry_count))
+            else:
+                print('{0} has no attribute retry_count.'.format(class_name))
+                retry_count = count
+
+            while count <= retry_count:
+                count += 1
+                unix_time = int(time.time())
+
+                try:
+                    cmd_result = c.execute(ser)
+                except Exception as e:
+                    print('Command \"{0}\" failed:\n{1}'.format(c.cmd, e))
+                    time.sleep(.5)
                 else:
-                    print('{0} has no attribute retry_count.'.format(class_name))
-                    retry_count = count
+                    if cmd_result:
+                        self._command_results[c.cmd] = {
+                            'timestamp': str(unix_time),
+                            'cmd_return': cmd_result
+                        }
 
-                while count <= retry_count:
-                    count += 1
-                    unix_time = int(time.time())
-
-                    try:
-                        cmd_result = c.execute(ser)
-                    except Exception as e:
-                        print('Command \"{0}\" failed:\n{1}'.format(c.cmd, e))
-                        time.sleep(.5)
+                        break
                     else:
-                        if cmd_result:
-                            self._command_results[c.cmd] = {
-                                'timestamp': str(unix_time),
-                                'cmd_return': cmd_result
-                            }
-
-                            break
-                        else:
-                            self._command_results[c.cmd] = {
-                                'timestamp': str(unix_time),
-                                'cmd_return': None
-                            }
-                            time.sleep(.5)
+                        self._command_results[c.cmd] = {
+                            'timestamp': str(unix_time),
+                            'cmd_return': None
+                        }
+                        time.sleep(.5)
 
 
 class Command(object):
@@ -209,21 +197,32 @@ def main():
     """
     This client code should parameterize the invoker with any commands.
     Maybe move the required commands, i.e. getcmdshell and setecho to the receiver?"""
+    serial_dev = '/dev/ttyUSB0'
     at_commands = Ims2Macro()
     at_commands.add(GetCmdShell(2))
     at_commands.add(SetEchoOff())
     at_commands.add(GetSigStrength(2))
-    at_commands.run()
-    at_response = at_commands.results
-    print(at_commands.results)
-    print(dumps(at_response['AT+SQNMONI=9']))
-    print(at_response['AT+SQNMONI=9']['timestamp'])
-    print(at_response['AT+SQNMONI=9']['cmd_return'])
-    if at_response['AT+SQNMONI=9']['cmd_return']:
-        print(at_response['AT+SQNMONI=9']['cmd_return']['RSRQ'])
-    else:
-        print("It looks like there was an error running the sigstr at command.  Maybe there is not service available.")
-    print('json version:\n{}'.format(dumps(at_response['AT+SQNMONI=9'])))
+
+    with serial.Serial(
+            port=serial_dev,  # '/dev/tty.usbserial-FTAMFK8M',
+            baudrate=115200,
+            bytesize=8,
+            parity='N',
+            stopbits=1,
+            timeout=1) \
+            as serial_comm:
+
+        at_commands.run(serial_comm)
+        at_response = at_commands.results
+        print(at_commands.results)
+        print(dumps(at_response['AT+SQNMONI=9']))
+        print(at_response['AT+SQNMONI=9']['timestamp'])
+        print(at_response['AT+SQNMONI=9']['cmd_return'])
+        if at_response['AT+SQNMONI=9']['cmd_return']:
+            print(at_response['AT+SQNMONI=9']['cmd_return']['RSRQ'])
+        else:
+            print("It looks like there was an error running the sigstr at command.  Maybe there is not service available.")
+        print('json version:\n{}'.format(dumps(at_response['AT+SQNMONI=9'])))
 
 
 if __name__ == '__main__':
