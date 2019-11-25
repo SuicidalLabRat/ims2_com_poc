@@ -25,9 +25,7 @@ class Ims2Macro:
             count = 0
             if hasattr(c, 'retry_count'):
                 retry_count = c.retry_count
-                print('{0} has attribute retry_count and its set to {1}'.format(class_name, retry_count))
             else:
-                print('{0} has no attribute retry_count.'.format(class_name))
                 retry_count = count
 
             while count <= retry_count:
@@ -37,7 +35,7 @@ class Ims2Macro:
                 try:
                     cmd_result = c.execute(ser)
                 except Exception as e:
-                    print('Command \"{0}\" failed:\n{1}'.format(c.cmd, e))
+                    print('AT command \"{0}\" failed:\n{1}'.format(c.cmd, e))
                     time.sleep(.5)
                 else:
                     if cmd_result:
@@ -45,7 +43,6 @@ class Ims2Macro:
                             'timestamp': str(unix_time),
                             'cmd_return': cmd_result
                         }
-
                         break
                     else:
                         self._command_results[c.cmd] = {
@@ -79,12 +76,13 @@ class GetCmdShell(Command):
         try:
             subshell_response = Ims2CmdShell(self, ser)
         except Exception as e:
-            print('Command \"{0}\" failed:\n{1}'.format(self.cmd, e))
+            print('AT command \"{0}\" failed:\n{1}'.format(self.cmd, e))
             return None
         else:
             if subshell_response and subshell_response[self._success_index] in self._success_codes:
                 return subshell_response
-            else: return None
+            else:
+                return None
 
 
 class SetEchoOff(Command):
@@ -115,11 +113,15 @@ class SetEchoOff(Command):
 
 class GetSigStrength(Command):
     """Gets the IMS2's current signal strength, in dBm."""
-    cmd = "AT+SQNMONI=9"  # 'AT+CSQ'  ## NOTE: Unlike the short command, CSQ, the longform command, SQNMONI, fails
-                          # if there isnt a carrier.
+    cmd = "AT+SQNMONI=9"    # NOTE: Unlike the CSQ command, SQNMONI will fail if there is no carrier.
     _success_codes = 'OK'
     _success_index = -1
     _response_index = -2
+    _unmapped_response_fields = {
+        'AT&T': 'carrier',
+        'VZN': 'carrier',
+        'OK': 'status'
+    }
 
     def __init__(self, retry_count=0):
         self.retry_count = retry_count
@@ -136,7 +138,7 @@ class GetSigStrength(Command):
 
                 sig_strength_response = [s.split(':') for s in sig_strength_response]
 
-                return list_of_lists2dict(sig_strength_response)
+                return list_of_lists2dict(sig_strength_response, self._unmapped_response_fields)
             else:
                 return None
 
@@ -177,8 +179,14 @@ def list_of_lists2dict(cmd_response_list, keymap=None):
     they should end up associated with in the returned dictionary."""
     d = dict()
     for l in cmd_response_list:
-        if isinstance(l, list) and len(l) is not 2:
-            l.append(None)
+        if isinstance(l, list) and len(l) < 2:
+            if keymap:
+                key = keymap.get(l[0], '')
+                if key:
+                    d[key] = l[0]
+                    continue
+                else:
+                    l.append(None)
         d[l[0]] = l[1]
     return d
 
