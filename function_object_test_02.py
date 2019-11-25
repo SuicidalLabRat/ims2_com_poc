@@ -1,18 +1,12 @@
 #!/usr/bin/python3
 import serial
 import time
-from operator import itemgetter
-from itertools import groupby
 from json import dumps
 #from time import sleep
-# from datetime import datetime
-from collections import deque
-
-# https://python-3-patterns-idioms-test.readthedocs.io/en/latest/FunctionObjects.html
 
 
 class Ims2Macro:
-    """The INVOKER class"""
+    """Our INVOKER class"""
     def __init__(self):
         self._commands = []
         self._command_results = dict()  # Should this be a deque?
@@ -119,18 +113,6 @@ class SetEchoOff(Command):
                 return None
 
 
-def list_list2dict(cmd_response_list, keymap=None):
-    """The keymap is a dict of potentially orphan values we might find in the cmd_response_list, and the keys that
-    they should end up associated with in the returned dictionary."""
-    # res = dict((k, [v[1] for v in itr]) for k, itr in groupby(response_list, itemgetter(0)))
-    d = dict()
-    for l in cmd_response_list:
-        if isinstance(l, list) and len(l) is not 2:
-            l.append(None)
-        d[l[0]] = l[1]
-    return d
-
-
 class GetSigStrength(Command):
     """Gets the IMS2's current signal strength, in dBm."""
     cmd = "AT+SQNMONI=9"  # 'AT+CSQ'  ## NOTE: Unlike the short command, CSQ, the longform command, SQNMONI, fails
@@ -154,7 +136,7 @@ class GetSigStrength(Command):
 
                 sig_strength_response = [s.split(':') for s in sig_strength_response]
 
-                return list_list2dict(sig_strength_response)
+                return list_of_lists2dict(sig_strength_response)
             else:
                 return None
 
@@ -190,6 +172,17 @@ class Ims2Status(object):
         self._invoker = Ims2Macro()
 
 
+def list_of_lists2dict(cmd_response_list, keymap=None):
+    """The keymap is a dict of potentially orphan values we might find in the cmd_response_list, and the keys that
+    they should end up associated with in the returned dictionary."""
+    d = dict()
+    for l in cmd_response_list:
+        if isinstance(l, list) and len(l) is not 2:
+            l.append(None)
+        d[l[0]] = l[1]
+    return d
+
+
 def main():
     # ! Do we need a clean, signal based, way to proactively shut this down,
     # ! or is the serial connection being managed by 'with' enough to insure
@@ -212,8 +205,10 @@ def main():
             timeout=1) \
             as serial_comm:
 
+        # ! If the command list persists, we may return stale data!?
         at_commands.run(serial_comm)
         at_response = at_commands.results
+
         print(at_commands.results)
         print(dumps(at_response['AT+SQNMONI=9']))
         print(at_response['AT+SQNMONI=9']['timestamp'])
