@@ -19,7 +19,7 @@ class Ims2Macro:
         self._commands.append(command)
 
     # Run commands on IMS2.
-    def run(self, ser):
+    def run(self):
         for c in self._commands:
             # class_name = type(c).__name__
             count = 0
@@ -225,7 +225,7 @@ def main():
         invoker.add(SetEchoOff(receiver))
         invoker.add(GetSigStrength(receiver, 2))
         # ! If the command list persists, we may return stale data!?
-        invoker.run(serial_comm)
+        invoker.run()
         at_response = invoker.history
 
         print(invoker.history)
