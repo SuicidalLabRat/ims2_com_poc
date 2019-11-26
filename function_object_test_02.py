@@ -12,7 +12,7 @@ class Ims2Macro:
         self._command_results = dict()  # Should this be a deque?
 
     @property
-    def results(self):
+    def history(self):
         return self._command_results
 
     def add(self, command):
@@ -33,7 +33,7 @@ class Ims2Macro:
                 unix_time = int(time.time())
 
                 try:
-                    cmd_result = c.execute(ser)
+                    cmd_result = c.execute()
                 except Exception as e:
                     print('AT command \"{0}\" failed:\n{1}'.format(c.cmd, e))
                     time.sleep(.5)
@@ -73,7 +73,7 @@ class GetCmdShell(Command):
         self._receiver = receiver
 
     def execute(self):
-        # print("Subshell serial instance: {0}: ".format(id(ser)))
+        print("Subshell serial instance: {0}: ".format(id(self._receiver._serial)))
         try:
             subshell_response = self._receiver.issue_at_cmd(self)
         except Exception as e:
@@ -100,7 +100,7 @@ class SetEchoOff(Command):
         self.retry_count = retry_count
 
     def execute(self):
-        # print("Echo Off serial instance: {0}: ".format(id(ser)))
+        print("Echo Off serial instance: {0}: ".format(id(self._receiver._serial)))
         try:
             echo_off_response = self._receiver.issue_at_cmd(self)
         except Exception as e:
@@ -130,7 +130,7 @@ class GetSigStrength(Command):
         self.retry_count = retry_count
 
     def execute(self):
-        # print("Signal Strength serial instance: {0}: ".format(id(ser)))
+        print("Signal Strength serial instance: {0}: ".format(id(self._receiver._serial)))
         try:
             sig_strength_response = self._receiver.issue_at_cmd(self)
         except Exception as e:
@@ -177,7 +177,7 @@ class Ims2CmdShellReceiver:
             return None
 
 
-# class Ims2Status(object):
+# class Ims2Client(object):
 #     """CLIENT class"""
 #     def __init__(self):
 #         self._receiver = Ims2CmdShell()  # <-- our case requires arguments :/
@@ -226,9 +226,9 @@ def main():
         invoker.add(GetSigStrength(receiver, 2))
         # ! If the command list persists, we may return stale data!?
         invoker.run(serial_comm)
-        at_response = invoker.results
+        at_response = invoker.history
 
-        print(invoker.results)
+        print(invoker.history)
         print(dumps(at_response['AT+SQNMONI=9']))
         print(at_response['AT+SQNMONI=9']['timestamp'])
         print(at_response['AT+SQNMONI=9']['cmd_return'])
