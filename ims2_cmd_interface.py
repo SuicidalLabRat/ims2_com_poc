@@ -115,6 +115,32 @@ class SetEchoOff(Command):
 
 class GetSigStrength(Command):
     """Gets the IMS2's current signal strength, in dBm."""
+    cmd = "GetSigStrength"
+    sig_keys = ['RSRP', 'RSRQ']
+
+    def __init__(self, receiver, retry_count=0):
+        self._receiver = receiver
+        self.retry_count = retry_count
+        self._getSigStrength = IssueSQNMONI(self._receiver)
+
+    def execute(self):
+        print("Signal Strength serial instance: {0}: ".format(id(self._receiver._serial)))
+        try:
+            sig_str = self._getSigStrength.execute()
+        except Exception as e:
+            print('Command \"{0}\" failed:\n{1}'.format(self.cmd, e))
+            return None
+        else:
+            if not sig_str:
+                return None
+            print(sig_str)
+            d = {x: sig_str[x] for x in self.sig_keys}
+            print(d)
+            return d
+
+
+class IssueSQNMONI(Command):
+    """Gets the IMS2's current signal strength, in dBm."""
     cmd = "AT+SQNMONI=9"    # NOTE: Unlike the CSQ command, SQNMONI will fail if there is no carrier.
     _success_codes = 'OK'
     _success_index = -1
@@ -130,7 +156,7 @@ class GetSigStrength(Command):
         self.retry_count = retry_count
 
     def execute(self):
-        print("Signal Strength serial instance: {0}: ".format(id(self._receiver._serial)))
+        print("IssueSQNMONI serial instance: {0}: ".format(id(self._receiver._serial)))
         try:
             sig_strength_response = self._receiver.issue_at_cmd(self)
         except Exception as e:
@@ -240,16 +266,16 @@ def main():
             invoker.run()
             at_response = invoker.history
 
-            print(invoker.history)
-            print(dumps(at_response['AT+SQNMONI=9']))
-            print(at_response['AT+SQNMONI=9']['timestamp'])
-            print(at_response['AT+SQNMONI=9']['cmd_return'])
-            if at_response['AT+SQNMONI=9']['cmd_return']:
-                print(at_response['AT+SQNMONI=9']['cmd_return']['RSRQ'])
-            else:
-                print("It looks like there was an error running the sigstr at command. "
-                      "Maybe there is not service available.")
-            print('json version:\n{}'.format(dumps(at_response['AT+SQNMONI=9'])))
+            # print(invoker.history)
+            print(dumps(at_response['GetSigStrength']))
+            # print(at_response['GetSigStrength']['timestamp'])
+            # print(at_response['GetSigStrength']['cmd_return'])
+            # if at_response['GetSigStrength']['cmd_return']:
+            #     print(at_response['GetSigStrength']['cmd_return']['RSRQ'])
+            # else:
+            #     print("It looks like there was an error running the sigstr at command. "
+            #           "Maybe there is not service available.")
+            # print('json version:\n{}'.format(dumps(at_response['GetSigStrength'])))
     #print('Gracefully stopped.')
 
 
