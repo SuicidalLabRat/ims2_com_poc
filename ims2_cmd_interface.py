@@ -1,6 +1,7 @@
 #!/usr/bin/python3
-import serial
 import time
+import serial
+import signal
 from json import dumps
 # from time import sleep
 
@@ -9,7 +10,7 @@ class Ims2Macro:
     """Our INVOKER class"""
     def __init__(self):
         self._commands = []
-        self._command_results = dict()  # Should this be a deque?
+        self._command_results = dict()  # Should this be a deque()?
 
     @property
     def history(self):
@@ -184,6 +185,19 @@ class Ims2CmdShellReceiver:
 #         self._invoker = Ims2Macro()
 
 
+class GracefulKiller:
+    """Signal handler.  Lets try to be as graceful as possible in handling systemd's signals."""
+    kill_now = False
+
+    def __init__(self):
+        signal.signal(signal.SIGINT, self.exit_gracefully)
+        signal.signal(signal.SIGTERM, self.exit_gracefully)
+
+    def exit_gracefully(self, signum, frame):
+        print('Received a kill signal! {}.'.format(signum))
+        self.kill_now = True
+
+
 def list_of_lists2dict(cmd_response_list, keymap=None):
     """The keymap is a dict of potentially orphan values we might find in the cmd_response_list, and the keys that
     they should end up associated with in the returned dictionary."""
@@ -202,42 +216,42 @@ def list_of_lists2dict(cmd_response_list, keymap=None):
 
 
 def main():
-    # ! Do we need a clean, signal based, way to proactively shut this down,
-    # ! or is the serial connection being managed by 'with' enough to insure
-    # ! we gracefully close the serial connection when this service gets killed?
-    """
-    This client code should parameterize the invoker with any commands.
-    Maybe move the required commands, i.e. getcmdshell and setecho to the receiver?"""
-    serial_dev = '/dev/ttyUSB0'
-    invoker = Ims2Macro()
+    killer = GracefulKiller()
+    while not killer.kill_now:
+        """
+        This client code should parameterize the invoker with any commands.
+        Maybe move the required commands, i.e. getcmdshell and setecho to the receiver?"""
+        serial_dev = '/dev/ttyUSB0'
+        invoker = Ims2Macro()
 
-    with serial.Serial(
-            port=serial_dev,  # '/dev/tty.usbserial-FTAMFK8M',
-            baudrate=115200,
-            bytesize=8,
-            parity='N',
-            stopbits=1,
-            timeout=1) \
-            as serial_comm:
+        with serial.Serial(
+                port=serial_dev,  # '/dev/tty.usbserial-FTAMFK8M',
+                baudrate=115200,
+                bytesize=8,
+                parity='N',
+                stopbits=1,
+                timeout=1) \
+                as serial_comm:
 
-        receiver = Ims2CmdShellReceiver(serial_comm)
-        invoker.add(GetCmdShell(receiver, 2))
-        invoker.add(SetEchoOff(receiver))
-        invoker.add(GetSigStrength(receiver, 2))
-        # ! If the command list persists, we may return stale data!?
-        invoker.run()
-        at_response = invoker.history
+            receiver = Ims2CmdShellReceiver(serial_comm)
+            invoker.add(GetCmdShell(receiver, 2))
+            invoker.add(SetEchoOff(receiver))
+            invoker.add(GetSigStrength(receiver, 2))
+            # ! If the command list persists, we may return stale data!?
+            invoker.run()
+            at_response = invoker.history
 
-        print(invoker.history)
-        print(dumps(at_response['AT+SQNMONI=9']))
-        print(at_response['AT+SQNMONI=9']['timestamp'])
-        print(at_response['AT+SQNMONI=9']['cmd_return'])
-        if at_response['AT+SQNMONI=9']['cmd_return']:
-            print(at_response['AT+SQNMONI=9']['cmd_return']['RSRQ'])
-        else:
-            print("It looks like there was an error running the sigstr at command. "
-                  "Maybe there is not service available.")
-        print('json version:\n{}'.format(dumps(at_response['AT+SQNMONI=9'])))
+            print(invoker.history)
+            print(dumps(at_response['AT+SQNMONI=9']))
+            print(at_response['AT+SQNMONI=9']['timestamp'])
+            print(at_response['AT+SQNMONI=9']['cmd_return'])
+            if at_response['AT+SQNMONI=9']['cmd_return']:
+                print(at_response['AT+SQNMONI=9']['cmd_return']['RSRQ'])
+            else:
+                print("It looks like there was an error running the sigstr at command. "
+                      "Maybe there is not service available.")
+            print('json version:\n{}'.format(dumps(at_response['AT+SQNMONI=9'])))
+    print('Gracefully stopped.')
 
 
 if __name__ == '__main__':

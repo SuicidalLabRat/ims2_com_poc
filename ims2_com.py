@@ -30,6 +30,6 @@ print(line1.decode("utf-8"))
 ser.write(b'AT+CSQ\r\n')
 time.sleep(.3)
 line2 = ser.readline()
-print(line2.decode("utf-8"))
+print('CSQ: {}'.format(line2.decode("utf-8")))
 
 print('finished')
