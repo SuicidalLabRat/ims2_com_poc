@@ -10,7 +10,7 @@ class Ims2Macro:
     """Our INVOKER class"""
     def __init__(self):
         self._commands = []
-        self._command_results = dict()  # Should this be a deque()?
+        self._command_results = dict()  # If we end up wanting to do replays, should this be a list, or maybe deque()?
 
     @property
     def history(self):
@@ -19,10 +19,9 @@ class Ims2Macro:
     def add(self, command):
         self._commands.append(command)
 
-    # Run commands on IMS2.
     def run(self):
         for c in self._commands:
-            # class_name = type(c).__name__
+            class_name = type(c).__name__
             count = 0
             if hasattr(c, 'retry_count'):
                 retry_count = c.retry_count
@@ -36,7 +35,7 @@ class Ims2Macro:
                 try:
                     cmd_result = c.execute()
                 except Exception as e:
-                    print('AT command \"{0}\" failed:\n{1}'.format(c.cmd, e))
+                    print('{0} command \"{1}\" failed:\n{2}'.format(class_name, c.cmd, e))
                     time.sleep(.5)
                 else:
                     if cmd_result:
@@ -54,7 +53,7 @@ class Ims2Macro:
 
 
 class Command(object):
-    """Base COMMAND interface"""
+    """COMMAND interface"""
     def execute(self):
         raise NotImplementedError
 
@@ -216,8 +215,8 @@ def list_of_lists2dict(cmd_response_list, keymap=None):
 
 
 def main():
-    killer = GracefulKiller()
-    while not killer.kill_now:
+    # killer = GracefulKiller()
+    # while not killer.kill_now:
         """
         This client code should parameterize the invoker with any commands.
         Maybe move the required commands, i.e. getcmdshell and setecho to the receiver?"""
@@ -251,7 +250,7 @@ def main():
                 print("It looks like there was an error running the sigstr at command. "
                       "Maybe there is not service available.")
             print('json version:\n{}'.format(dumps(at_response['AT+SQNMONI=9'])))
-    print('Gracefully stopped.')
+    #print('Gracefully stopped.')
 
 
 if __name__ == '__main__':
