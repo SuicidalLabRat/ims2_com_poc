@@ -3,7 +3,6 @@ import time
 import serial
 import signal
 from json import dumps
-# from time import sleep
 
 
 class Ims2Macro:
@@ -133,9 +132,7 @@ class GetSigStrength(Command):
         else:
             if not sig_str:
                 return None
-            print(sig_str)
             d = {x: sig_str[x] for x in self.sig_keys}
-            print(d)
             return d
 
 
@@ -216,7 +213,6 @@ class GracefulKiller:
 
     def __init__(self):
         signal.signal(signal.SIGINT, self.exit_gracefully)
-        signal.signal(signal.SIGKILL, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
 
     def exit_gracefully(self, signum, frame):
@@ -242,42 +238,40 @@ def list_of_lists2dict(cmd_response_list, keymap=None):
 
 
 def main():
-    # killer = GracefulKiller()
-    # while not killer.kill_now:
-        """
-        This client code should parameterize the invoker with any commands.
-        Maybe move the required commands, i.e. getcmdshell and setecho to the receiver?"""
-        serial_dev = '/dev/ttyUSB0'
-        invoker = Ims2Macro()
+    """
+    This client code should parameterize the invoker with any commands.
+    Maybe move the required commands, i.e. getcmdshell and setecho to the receiver?
+    """
+    serial_dev = '/dev/ttyUSB0'
+    invoker = Ims2Macro()
+    killer = GracefulKiller()
 
-        with serial.Serial(
-                port=serial_dev,  # '/dev/tty.usbserial-FTAMFK8M',
-                baudrate=115200,
-                bytesize=8,
-                parity='N',
-                stopbits=1,
-                timeout=1) \
-                as serial_comm:
+    with serial.Serial(
+            port=serial_dev,
+            baudrate=115200,
+            bytesize=8,
+            parity='N',
+            stopbits=1,
+            timeout=1) \
+            as serial_comm:
 
-            receiver = Ims2CmdShellReceiver(serial_comm)
-            invoker.add(GetCmdShell(receiver, 2))
-            invoker.add(SetEchoOff(receiver))
-            invoker.add(GetSigStrength(receiver, 2))
-            # ! If the command list persists, we may return stale data!?
+        receiver = Ims2CmdShellReceiver(serial_comm)
+        invoker.add(GetCmdShell(receiver, 2))
+        invoker.add(SetEchoOff(receiver))
+        invoker.add(GetSigStrength(receiver, 2))
+
+        while not killer.kill_now:
             invoker.run()
             at_response = invoker.history
+            if at_response['GetSigStrength']['cmd_return']:
+                print(at_response['GetSigStrength']['cmd_return']['RSRP'])
+            else:
+                print("It looks like there was an error running the sigstr at command. "
+                      "Maybe there is not service available.")
+            print('json version:\n{}\n'.format(dumps(at_response['GetSigStrength'])))
 
-            # print(invoker.history)
-            print(dumps(at_response['GetSigStrength']))
-            # print(at_response['GetSigStrength']['timestamp'])
-            # print(at_response['GetSigStrength']['cmd_return'])
-            # if at_response['GetSigStrength']['cmd_return']:
-            #     print(at_response['GetSigStrength']['cmd_return']['RSRQ'])
-            # else:
-            #     print("It looks like there was an error running the sigstr at command. "
-            #           "Maybe there is not service available.")
-            # print('json version:\n{}'.format(dumps(at_response['GetSigStrength'])))
-    #print('Gracefully stopped.')
+            time.sleep(5)
+        print('Gracefully stopped.')
 
 
 if __name__ == '__main__':
