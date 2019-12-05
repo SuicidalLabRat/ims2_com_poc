@@ -5,6 +5,8 @@ import serial
 import signal
 from glob import glob
 
+__version__ = '0.0.1'
+
 
 class Ims2Macro:
     """Our INVOKER class"""
