@@ -272,7 +272,7 @@ def write_sig_str_file(fname, data):
                     f.write(delimiter.join(filedata))
                     f.flush()
                     os.fdatasync(f)
-                    print(delimiter.join(filedata))
+                    # print(delimiter.join(filedata))
                     return True
 
 
