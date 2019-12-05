@@ -1,8 +1,9 @@
 #!/usr/bin/python3
+import os
 import time
 import serial
 import signal
-from json import dumps
+from glob import glob
 
 
 class Ims2Macro:
@@ -72,7 +73,7 @@ class GetCmdShell(Command):
         self._receiver = receiver
 
     def execute(self):
-        print("Subshell serial instance: {0}: ".format(id(self._receiver._serial)))
+        # print("Subshell serial instance: {0}: ".format(id(self._receiver._serial)))
         try:
             subshell_response = self._receiver.issue_at_cmd(self)
         except Exception as e:
@@ -99,7 +100,7 @@ class SetEchoOff(Command):
         self.retry_count = retry_count
 
     def execute(self):
-        print("Echo Off serial instance: {0}: ".format(id(self._receiver._serial)))
+        # print("Echo Off serial instance: {0}: ".format(id(self._receiver._serial)))
         try:
             echo_off_response = self._receiver.issue_at_cmd(self)
         except Exception as e:
@@ -123,7 +124,7 @@ class GetSigStrength(Command):
         self._getSigStrength = IssueSQNMONI(self._receiver)
 
     def execute(self):
-        print("Signal Strength serial instance: {0}: ".format(id(self._receiver._serial)))
+        # print("Signal Strength serial instance: {0}: ".format(id(self._receiver._serial)))
         try:
             sig_str = self._getSigStrength.execute()
         except Exception as e:
@@ -153,7 +154,7 @@ class IssueSQNMONI(Command):
         self.retry_count = retry_count
 
     def execute(self):
-        print("IssueSQNMONI serial instance: {0}: ".format(id(self._receiver._serial)))
+        # print("IssueSQNMONI serial instance: {0}: ".format(id(self._receiver._serial)))
         try:
             sig_strength_response = self._receiver.issue_at_cmd(self)
         except Exception as e:
@@ -200,11 +201,20 @@ class Ims2CmdShellReceiver:
             return None
 
 
-# class Ims2Client(object):
-#     """CLIENT class"""
-#     def __init__(self):
-#         self._receiver = Ims2CmdShell()  # <-- our case requires arguments :/
-#         self._invoker = Ims2Macro()
+class FileName:
+    fn = 0
+
+    def __init__(self, count, ext):
+        self._count = count
+        self._ext = ext
+
+    @property
+    def next_name(self):
+        if self.fn == self._count:
+            self.fn = 0
+        name = '{0:0>2}'.format(self.fn)
+        self.fn += 1
+        return '{0}.{1}'.format(name, self._ext)
 
 
 class GracefulKiller:
@@ -237,6 +247,45 @@ def list_of_lists2dict(cmd_response_list, keymap=None):
     return d
 
 
+def write_sig_str_file(fname, data):
+    delimiter = ','
+    if data:
+        try:
+            filedata = (
+                data['GetSigStrength']['timestamp'],
+                data['GetSigStrength']['cmd_return']['RSRP'],
+                data['GetSigStrength']['cmd_return']['RSRQ']
+            )
+        except KeyError as e:
+            print('Failed to create signal strength log file.  Expected {} key to be available.'.format(e))
+            return None
+        except Exception as e:
+            print('Failed to create signal strength log file.  Unknown exception - {}.'.format(e))
+            return None
+        else:
+            try:
+                f = open(fname, 'w')
+            except IOError as e:
+                print('Error opening signature log file for writing. \n{}'.format(e))
+            else:
+                with f:
+                    f.write(delimiter.join(filedata))
+                    f.flush()
+                    os.fdatasync(f)
+                    print(delimiter.join(filedata))
+                    return True
+
+
+def garbage_collection(path, ext):
+    file_list = glob('{0}*.{1}'.format(path, ext))
+
+    for filePath in file_list:
+        try:
+            os.remove(filePath)
+        except Exception as e:
+            print("Garbage collection error deleting file: {0}\n{1}".format(filePath, e))
+
+
 def main():
     """
     This client code should parameterize the invoker with any commands.
@@ -245,6 +294,11 @@ def main():
     serial_dev = '/dev/ttyUSB0'
     invoker = Ims2Macro()
     killer = GracefulKiller()
+    sig_log_file_ext = 'ss'
+    sig_file_path = '/tmp/'
+
+    sig_log_file = FileName(10, sig_log_file_ext)
+    garbage_collection(sig_file_path, sig_log_file_ext)
 
     with serial.Serial(
             port=serial_dev,
@@ -264,11 +318,12 @@ def main():
             invoker.run()
             at_response = invoker.history
             if at_response['GetSigStrength']['cmd_return']:
-                print(at_response['GetSigStrength']['cmd_return']['RSRP'])
+                file = '{0}{1}'.format(sig_file_path, sig_log_file.next_name)
+                if file:
+                    write_sig_str_file(file, at_response)
             else:
                 print("It looks like there was an error running the sigstr at command. "
-                      "Maybe there is not service available.")
-            print('json version:\n{}\n'.format(dumps(at_response['GetSigStrength'])))
+                      "Maybe there is no carrier or service available.")
 
             time.sleep(5)
         print('Gracefully stopped.')
