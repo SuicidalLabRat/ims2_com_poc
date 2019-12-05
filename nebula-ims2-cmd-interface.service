@@ -1,0 +1,15 @@
+[Unit]
+Description=Interface to the IMS2 command shell
+Requires=ims2-ppp.service
+After=ims2-ppp.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/bin/ims2_cmd_interface.py
+Restart=always
+RestartSec=10
+StandardOutput=syslog
+StandardError=syslog
+
+[Install]
+WantedBy=multi-user.target
